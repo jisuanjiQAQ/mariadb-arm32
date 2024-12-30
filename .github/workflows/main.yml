@@ -28,19 +28,19 @@ jobs:
 
     - name: Download MariaDB source code
       run: |
-        wget https://downloads.mariadb.org/f/mariadb-10.6.5/source/mariadb-10.6.5.tar.gz
-        tar -xzf mariadb-10.6.5.tar.gz
-        cd mariadb-10.6.5
+        git clone https://github.com/MariaDB/server.git
+        cd server
+        git checkout 10.6
 
     - name: Build MariaDB
       run: |
-        cd mariadb-10.6.5
+        cd server
         cmake . -DCMAKE_TOOLCHAIN_FILE=../toolchain-arm.cmake
         make -j$(nproc)
 
     - name: Compress build artifacts
       run: |
-        tar -czf mariadb-arm32.tar.gz mariadb-10.6.5
+        tar -czf mariadb-arm32.tar.gz server
 
     - name: Create GitHub Release
       id: create_release
@@ -62,4 +62,3 @@ jobs:
         asset_path: ./mariadb-arm32.tar.gz
         asset_name: mariadb-arm32.tar.gz
         asset_content_type: application/gzip
-
