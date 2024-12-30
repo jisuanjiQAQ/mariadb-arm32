@@ -29,9 +29,10 @@ jobs:
       uses: docker/build-push-action@v2  # 构建Docker镜像
       with:
         context: .
-        file: Dockerfile
+        file: ./Dockerfile  # 确保Dockerfile路径正确
         platforms: linux/arm/v7
         push: false  # 不推送到DockerHub
+        load: true  # 将结果镜像加载到Docker中
         tags: mariadb:10.6-arm32  # 构建版本为MariaDB 10.6
 
     - name: Save Docker image to file
