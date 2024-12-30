@@ -20,7 +20,7 @@ jobs:
     - name: Install cross-compilation tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+        sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf make
 
     - name: Install dependencies
       run: |
@@ -32,10 +32,21 @@ jobs:
         cd server
         git checkout 10.6
 
+    - name: Set up cross-compilation environment
+      run: |
+        export CC=arm-linux-gnueabihf-gcc
+        export CXX=arm-linux-gnueabihf-g++
+        export AR=arm-linux-gnueabihf-ar
+        export AS=arm-linux-gnueabihf-as
+        export LD=arm-linux-gnueabihf-ld
+        export NM=arm-linux-gnueabihf-nm
+        export RANLIB=arm-linux-gnueabihf-ranlib
+        export STRIP=arm-linux-gnueabihf-strip
+
     - name: Build MariaDB
       run: |
         cd server
-        cmake . -DCMAKE_TOOLCHAIN_FILE=../toolchain-arm.cmake
+        cmake .
         make -j$(nproc)
 
     - name: Compress build artifacts
