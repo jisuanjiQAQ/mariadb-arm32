@@ -50,12 +50,13 @@ jobs:
     - name: Create GitHub Release
       id: create_release
       uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.sha }}
         release_name: ${{ github.sha }}-$(date +'%Y%m%d%H%M%S')
         draft: false
         prerelease: false
-        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download build artifacts
       uses: actions/download-artifact@v4.1.8
@@ -72,3 +73,14 @@ jobs:
         asset_path: ./mariadb-arm32.tar.gz
         asset_name: mariadb-arm32.tar.gz
         asset_content_type: application/gzip
+
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: mariadb-arm32.tar.gz
+        name: mariadb-arm32-${{ github.run_id }}
+        tag_name: ${{ github.run_id }}
+        body: |
+          构建产物: mariadb-arm32.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
