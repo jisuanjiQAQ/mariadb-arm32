@@ -2,12 +2,6 @@ name: 为 ARM32 交叉编译 MariaDB
 
 on:
   workflow_dispatch:  # 用户发起构建请求时触发
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
 
 jobs:
   build:
@@ -21,17 +15,14 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf make
-
     - name: Install dependencies
       run: |
         sudo apt-get install -y cmake libssl-dev libncurses5-dev bison libaio-dev libboost-dev libboost-program-options-dev libboost-system-dev libboost-filesystem-dev
-
     - name: Download MariaDB source code
       run: |
         git clone https://github.com/MariaDB/server.git
         cd server
         git checkout 10.6
-
     - name: Set up cross-compilation environment
       run: |
         export CC=arm-linux-gnueabihf-gcc
@@ -42,17 +33,14 @@ jobs:
         export NM=arm-linux-gnueabihf-nm
         export RANLIB=arm-linux-gnueabihf-ranlib
         export STRIP=arm-linux-gnueabihf-strip
-
     - name: Build MariaDB
       run: |
         cd server
         cmake .
         make -j$(nproc)
-
     - name: Compress build artifacts
       run: |
         tar -czf mariadb-arm32.tar.gz server
-
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4.5.0
       with:
@@ -62,13 +50,12 @@ jobs:
     - name: Create GitHub Release
       id: create_release
       uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.sha }}
         release_name: ${{ github.sha }}-$(date +'%Y%m%d%H%M%S')
         draft: false
         prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download build artifacts
       uses: actions/download-artifact@v4.1.8
