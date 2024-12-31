@@ -53,8 +53,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.sha }}
-        release_name: ${{ github.sha }}-$(date +'%Y%m%d%H%M%S')
+        tag_name: build-${{ github.run_id }}
+        release_name: build-${{ github.run_id }}-$(date +'%Y%m%d%H%M%S')
         draft: false
         prerelease: false
 
@@ -79,7 +79,7 @@ jobs:
       with:
         files: mariadb-arm32.tar.gz
         name: mariadb-arm32-${{ github.run_id }}
-        tag_name: ${{ github.run_id }}
+        tag_name: build-${{ github.run_id }}
         body: |
           构建产物: mariadb-arm32.tar.gz
       env:
