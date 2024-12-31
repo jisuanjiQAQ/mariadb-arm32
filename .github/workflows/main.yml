@@ -8,22 +8,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: 检出代码仓库
       uses: actions/checkout@v2  # 检出代码仓库
 
-    - name: Install cross-compilation tools
+    - name: 安装交叉编译工具
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf make
-    - name: Install dependencies
+    - name: 安装依赖项
       run: |
         sudo apt-get install -y cmake libssl-dev libncurses5-dev bison libaio-dev libboost-dev libboost-program-options-dev libboost-system-dev libboost-filesystem-dev
-    - name: Download MariaDB source code
+    - name: 下载 MariaDB 源代码
       run: |
         git clone https://github.com/MariaDB/server.git
         cd server
         git checkout 10.6
-    - name: Set up cross-compilation environment
+    - name: 设置交叉编译环境
       run: |
         export CC=arm-linux-gnueabihf-gcc
         export CXX=arm-linux-gnueabihf-g++
@@ -33,21 +33,22 @@ jobs:
         export NM=arm-linux-gnueabihf-nm
         export RANLIB=arm-linux-gnueabihf-ranlib
         export STRIP=arm-linux-gnueabihf-strip
-    - name: Build MariaDB
+    - name: 构建 MariaDB
       run: |
-        cd server
-        cmake .
+        mkdir -p build
+        cd build
+        cmake ../server
         make -j$(nproc)
-    - name: Compress build artifacts
+    - name: 压缩构建产物
       run: |
-        tar -czf mariadb-arm32.tar.gz server
-    - name: Upload build artifacts
+        tar -czf mariadb-arm32.tar.gz -C build .
+    - name: 上传构建产物
       uses: actions/upload-artifact@v4.5.0
       with:
         name: mariadb-arm32
         path: mariadb-arm32.tar.gz
 
-    - name: Create GitHub Release
+    - name: 创建 GitHub Release
       id: create_release
       uses: actions/create-release@v1
       env:
@@ -58,13 +59,13 @@ jobs:
         draft: false
         prerelease: false
 
-    - name: Download build artifacts
+    - name: 下载构建产物
       uses: actions/download-artifact@v4.1.8
       with:
         name: mariadb-arm32
         path: .
 
-    - name: Upload Release Asset
+    - name: 上传 Release 资产
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -74,7 +75,7 @@ jobs:
         asset_name: mariadb-arm32.tar.gz
         asset_content_type: application/gzip
 
-    - name: Upload to Release
+    - name: 上传到 Release
       uses: softprops/action-gh-release@v1
       with:
         files: mariadb-arm32.tar.gz
