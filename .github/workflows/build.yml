@@ -6,8 +6,7 @@ on:
 env:
   IMAGE_TAR: mariadb-10-11-armv7l-${{ github.run_number }}.tar
   RELEASE_TAG: ${{ github.run_number }}
-  CROSS_ROOT: /opt/cross
-  SYSROOT: /opt/cross/arm-linux-gnueabihf/libc
+  CCACHE_DIR: /tmp/ccache
 
 jobs:
   build:
@@ -15,12 +14,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Install cross toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
-                                  cmake ninja-build build-essential
-
+      # ---------- 源码 ----------
       - name: Checkout MariaDB 10.11
         uses: actions/checkout@v4
         with:
@@ -28,8 +22,32 @@ jobs:
           ref: 10.11
           path: mariadb
 
-      - name: Cross-compile MariaDB
+      # ---------- 工具链 ----------
+      - name: Install cross toolchain & 32-bit deps
         run: |
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
+            cmake ninja-build pkg-config \
+            libncurses5-dev:armhf libssl-dev:armhf \
+            libzstd-dev:armhf libaio-dev:armhf \
+            ccache
+
+      # ---------- ccache ----------
+      - name: ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-mariadb-10-11-armv7l-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-mariadb-10-11-armv7l-
+
+      - name: Cross-compile
+        run: |
+          export CCACHE_DIR=${{ env.CCACHE_DIR }}
+          export CC="ccache arm-linux-gnueabihf-gcc"
+          export CXX="ccache arm-linux-gnueabihf-g++"
           mkdir build && cd build
           cmake ../mariadb \
             -DCMAKE_SYSTEM_NAME=Linux \
@@ -48,21 +66,22 @@ jobs:
           DESTDIR=$PWD/install ninja install
           tar czf mariadb-install.tar.gz -C install .
 
-      - name: Generate Dockerfile & image
+      # ---------- 镜像打包 ----------
+      - name: Generate image
         run: |
-          mkdir -p stage
+          mkdir stage
           tar xzf build/mariadb-install.tar.gz -C stage
           cat <<'EOF' > stage/Dockerfile
           FROM scratch
           COPY . /
           RUN ["/usr/local/mariadb/bin/mariadbd", "--version"]
           EOF
-          # 构建镜像（x86_64 runner 里直接打包）
           docker buildx build --platform linux/arm/v7 \
             -t mariadb:10-11-armv7l-cross \
             --load stage
           docker save mariadb:10-11-armv7l-cross -o ${{ env.IMAGE_TAR }}
 
+      # ---------- Release ----------
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
