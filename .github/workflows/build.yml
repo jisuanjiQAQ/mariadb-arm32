@@ -14,7 +14,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      # ---------- 源码 ----------
       - name: Checkout MariaDB 10.11
         uses: actions/checkout@v4
         with:
@@ -22,12 +21,23 @@ jobs:
           ref: 10.11
           path: mariadb
 
-      # ---------- 工具链（Ubuntu 20.04 armhf 仓库） ----------
+      # ---------- 彻底替换为 ports.ubuntu.com ----------
       - name: Install cross toolchain & 32-bit deps
         run: |
+          # 1) 启用 armhf 架构
           sudo dpkg --add-architecture armhf
-          sudo sed -i 's|http://.*.ubuntu.com|http://ports.ubuntu.com|g' /etc/apt/sources.list
-          sudo sed -i 's/noble/focal/g' /etc/apt/sources.list
+          # 2) 完全替换为 ports 源
+          sudo tee /etc/apt/sources.list >/dev/null <<EOF
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu focal main restricted universe multiverse
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu focal-updates main restricted universe multiverse
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu focal-backports main restricted universe multiverse
+          deb [arch=amd64,i386] http://security.ubuntu.com/ubuntu focal-security main restricted universe multiverse
+
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal main restricted universe multiverse
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal-updates main restricted universe multiverse
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal-backports main restricted universe multiverse
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports focal-security main restricted universe multiverse
+          EOF
           sudo apt-get update
           sudo apt-get install -y \
             gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
@@ -42,8 +52,7 @@ jobs:
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ${{ runner.os }}-mariadb-10-11-armv7l-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-mariadb-10-11-armv7l-
+          restore-keys: ${{ runner.os }}-mariadb-10-11-armv7l-
 
       # ---------- 交叉编译 ----------
       - name: Cross-compile
