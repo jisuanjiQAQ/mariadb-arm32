@@ -22,10 +22,12 @@ jobs:
           ref: 10.11
           path: mariadb
 
-      # ---------- 工具链 ----------
+      # ---------- 工具链（Ubuntu 20.04 armhf 仓库） ----------
       - name: Install cross toolchain & 32-bit deps
         run: |
           sudo dpkg --add-architecture armhf
+          sudo sed -i 's|http://.*.ubuntu.com|http://ports.ubuntu.com|g' /etc/apt/sources.list
+          sudo sed -i 's/noble/focal/g' /etc/apt/sources.list
           sudo apt-get update
           sudo apt-get install -y \
             gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
@@ -43,12 +45,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mariadb-10-11-armv7l-
 
+      # ---------- 交叉编译 ----------
       - name: Cross-compile
         run: |
+          mkdir build && cd build
           export CCACHE_DIR=${{ env.CCACHE_DIR }}
           export CC="ccache arm-linux-gnueabihf-gcc"
           export CXX="ccache arm-linux-gnueabihf-g++"
-          mkdir build && cd build
           cmake ../mariadb \
             -DCMAKE_SYSTEM_NAME=Linux \
             -DCMAKE_SYSTEM_PROCESSOR=arm \
@@ -67,13 +70,14 @@ jobs:
           tar czf mariadb-install.tar.gz -C install .
 
       # ---------- 镜像打包 ----------
-      - name: Generate image
+      - name: Build Docker image
         run: |
           mkdir stage
           tar xzf build/mariadb-install.tar.gz -C stage
           cat <<'EOF' > stage/Dockerfile
           FROM scratch
           COPY . /
+          ENV PATH=$PATH:/usr/local/mariadb/bin:/usr/local/mariadb/scripts
           RUN ["/usr/local/mariadb/bin/mariadbd", "--version"]
           EOF
           docker buildx build --platform linux/arm/v7 \
