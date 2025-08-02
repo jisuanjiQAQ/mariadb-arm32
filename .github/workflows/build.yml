@@ -1,4 +1,4 @@
-name: Release MariaDB 10.11 armv7l
+name: Release MariaDB 10.11 armv7l (cross)
 
 on:
   workflow_dispatch:
@@ -6,99 +6,67 @@ on:
 env:
   IMAGE_TAR: mariadb-10-11-armv7l-${{ github.run_number }}.tar
   RELEASE_TAG: ${{ github.run_number }}
-  CCACHE_DIR: /tmp/ccache
+  CROSS_ROOT: /opt/cross
+  SYSROOT: /opt/cross/arm-linux-gnueabihf/libc
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
     steps:
-      - name: Checkout MariaDB 10.11 source
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
+                                  cmake ninja-build build-essential
+
+      - name: Checkout MariaDB 10.11
         uses: actions/checkout@v4
         with:
           repository: MariaDB/server
           ref: 10.11
           path: mariadb
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm/v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ${{ runner.os }}-mariadb-10-11-armv7l-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-mariadb-10-11-armv7l-
-
-      - name: Generate Dockerfile
+      - name: Cross-compile MariaDB
         run: |
-          cat <<'EOF' > mariadb/Dockerfile
-          # syntax=docker/dockerfile:1
-          FROM ubuntu:22.04 AS builder
+          mkdir build && cd build
+          cmake ../mariadb \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=arm \
+            -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc \
+            -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local/mariadb \
+            -DWITH_SSL=system \
+            -DWITH_ZLIB=system \
+            -DWITHOUT_TOKUDB=1 \
+            -DWITHOUT_MROONGA=1 \
+            -DWITHOUT_OQGRAPH=1 \
+            -GNinja
+          ninja -j$(nproc)
+          DESTDIR=$PWD/install ninja install
+          tar czf mariadb-install.tar.gz -C install .
 
-          RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              build-essential cmake libssl-dev libzstd-dev libxml2-dev \
-              libncurses5-dev libjemalloc-dev pkg-config bison git ccache \
-              && rm -rf /var/lib/apt/lists/*
-
-          ENV PATH="/usr/lib/ccache:$PATH"
-          ENV CCACHE_DIR=/ccache
-          RUN mkdir -p /ccache
-
-          COPY . /usr/src/mariadb
-          RUN mkdir -p /usr/src/build && cd /usr/src/build && \
-              cmake ../mariadb \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DWITH_SSL=system \
-                -DWITH_ZLIB=system \
-                -DWITH_JEMALLOC=ON \
-                -DWITHOUT_TOKUDB=1 \
-                -DWITHOUT_MROONGA=1 \
-                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && \
-              make -j$(nproc) && make install DESTDIR=/mariadb
-
-          FROM ubuntu:22.04
-          COPY --from=builder /mariadb/usr/local/mariadb /usr/local/mariadb
-          ENV PATH=$PATH:/usr/local/mariadb/bin:/usr/local/mariadb/scripts
-          RUN groupadd -r mysql && useradd -r -g mysql mysql && \
-              mkdir -p /var/lib/mysql /var/run/mysqld && \
-              chown -R mysql:mysql /var/lib/mysql /var/run/mysqld && \
-              chmod 1777 /var/run/mysqld
-
-          RUN apt-get update && apt-get install -y curl && \
-              curl -fsSL https://raw.githubusercontent.com/MariaDB/mariadb-docker/master/10.11/docker-entrypoint.sh \
-                -o /usr/local/bin/docker-entrypoint.sh && \
-              chmod +x /usr/local/bin/docker-entrypoint.sh
-          EXPOSE 3306
-          ENTRYPOINT ["docker-entrypoint.sh"]
-          CMD ["mysqld"]
+      - name: Generate Dockerfile & image
+        run: |
+          mkdir -p stage
+          tar xzf build/mariadb-install.tar.gz -C stage
+          cat <<'EOF' > stage/Dockerfile
+          FROM scratch
+          COPY . /
+          RUN ["/usr/local/mariadb/bin/mariadbd", "--version"]
           EOF
+          # 构建镜像（x86_64 runner 里直接打包）
+          docker buildx build --platform linux/arm/v7 \
+            -t mariadb:10-11-armv7l-cross \
+            --load stage
+          docker save mariadb:10-11-armv7l-cross -o ${{ env.IMAGE_TAR }}
 
-      - name: Build image
-        uses: docker/build-push-action@v5
-        with:
-          context: mariadb
-          platforms: linux/arm/v7
-          tags: mariadb:10-11-armv7l
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Save image
-        run: docker save mariadb:10-11-armv7l -o ${{ env.IMAGE_TAR }}
-
-      - name: Create Release
+      - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: "MariaDB 10.11 armv7l - ${{ github.event.repository.updated_at }}"
+          name: "MariaDB 10.11 armv7l (cross) - ${{ github.event.repository.updated_at }}"
           files: ${{ env.IMAGE_TAR }}
           generate_release_notes: false
